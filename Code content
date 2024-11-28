@@ -1,0 +1,100 @@
+import os
+import shutil
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import win32api
+
+class USBFileCopierApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("USB File Copier")
+        self.root.geometry("800x480")  # Adjust size for your display
+        self.root.configure(bg="lightblue")
+
+        # Variables
+        self.source_file = None
+        self.usb_drives = []
+        self.source_drive = tk.StringVar()
+        self.file_label_text = tk.StringVar(value="No file selected")
+
+        # UI Elements
+        self.create_widgets()
+
+    def create_widgets(self):
+        # Title
+        tk.Label(self.root, text="USB File Copier", font=("Helvetica", 24), bg="lightblue").pack(pady=10)
+
+        # Drive Selection
+        tk.Button(self.root, text="Refresh USB Drives", font=("Helvetica", 16), command=self.refresh_drives).pack(pady=10)
+        self.drive_menu = tk.OptionMenu(self.root, self.source_drive, [])
+        self.drive_menu.config(font=("Helvetica", 16))
+        self.drive_menu.pack(pady=10)
+
+        # File Selection
+        tk.Button(self.root, text="Select File", font=("Helvetica", 16), command=self.select_file).pack(pady=10)
+        tk.Label(self.root, textvariable=self.file_label_text, font=("Helvetica", 12), bg="lightblue").pack(pady=5)
+
+        # Start Copy
+        tk.Button(self.root, text="Copy File to All USBs", font=("Helvetica", 16), command=self.copy_file).pack(pady=20)
+
+    def refresh_drives(self):
+        """Refresh the list of USB drives."""
+        drives = [d for d in win32api.GetLogicalDriveStrings().split('\000') if d]
+        usb_drives = []
+
+        for drive in drives:
+            try:
+                drive_type = win32api.GetDriveType(drive)
+                if drive_type == win32api.DRIVE_REMOVABLE:  # Detect removable drives
+                    usb_drives.append(drive)
+            except Exception as e:
+                print(f"Error checking drive {drive}: {e}")
+
+        self.usb_drives = usb_drives
+        if self.usb_drives:
+            self.source_drive.set(self.usb_drives[0])  # Default to the first drive
+            menu = self.drive_menu["menu"]
+            menu.delete(0, "end")
+            for drive in self.usb_drives:
+                menu.add_command(label=drive, command=lambda d=drive: self.source_drive.set(d))
+            messagebox.showinfo("Drives Refreshed", f"Detected drives: {self.usb_drives}")
+        else:
+            messagebox.showwarning("No Drives", "No USB drives detected.")
+
+    def select_file(self):
+        """Open a file dialog to select the source file."""
+        if not self.source_drive.get():
+            messagebox.showwarning("No Drive Selected", "Please select a source drive first.")
+            return
+        file_path = filedialog.askopenfilename(initialdir=self.source_drive.get(), title="Select File")
+        if file_path:
+            self.source_file = file_path
+            self.file_label_text.set(f"Selected: {os.path.basename(file_path)}")
+
+    def copy_file(self):
+        """Copy the selected file to all other USB drives."""
+        if not self.source_file or not os.path.exists(self.source_file):
+            messagebox.showerror("Error", "No file selected or file does not exist.")
+            return
+
+        target_drives = [drive for drive in self.usb_drives if drive != self.source_drive.get()]
+        if not target_drives:
+            messagebox.showwarning("No Target Drives", "No target drives available for copying.")
+            return
+
+        for drive in target_drives:
+            try:
+                target_path = os.path.join(drive, os.path.basename(self.source_file))
+                shutil.copy(self.source_file, target_path)
+                print(f"Copied to {target_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to copy to {drive}: {e}")
+                return
+
+        messagebox.showinfo("Success", "File successfully copied to all USB drives!")
+
+# Main program
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = USBFileCopierApp(root)
+    root.mainloop()
